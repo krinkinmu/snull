@@ -53,7 +53,7 @@ static void snull_pool_setup(struct net_device *dev)
 		struct snull_packet *pkt = kmalloc(sizeof(*pkt), GFP_KERNEL);
 
 		if (pkt == NULL) {
-			netdev_warn(dev, "Ran out of memory\n");
+			netdev_warn(dev, "ran out of memory\n");
 			return;
 		}
 		pkt->dev = dev;
@@ -66,6 +66,10 @@ static void snull_pool_teardown(struct net_device *dev)
 	struct snull_priv *priv = netdev_priv(dev);
 	struct list_head *pos, *tmp;
 
+	/*
+		Not safe: we must wait all in-flight packets before,
+		but so far it's enough
+	*/
 	list_for_each_safe(pos, tmp, &priv->pool)
 		kfree(S_PACKET(pos));
 }
@@ -143,6 +147,8 @@ static void snull_dev_rx(struct net_device *dev, struct snull_packet *pkt)
 	struct snull_priv *priv = netdev_priv(dev);
 	struct sk_buff *skb;
 
+	netdev_dbg(dev, "snull_dev_rx\n");
+
 	skb = netdev_alloc_skb_ip_align(dev, pkt->len);
 	if (!skb) {
 		netdev_warn(dev, "low on mem, packet dropped\n");
@@ -156,7 +162,8 @@ static void snull_dev_rx(struct net_device *dev, struct snull_packet *pkt)
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	priv->stats.rx_packets++;
 	priv->stats.rx_bytes += pkt->len;
-	netif_rx(skb);
+	if (NET_RX_DROP == netif_rx(skb))
+		netdev_warn(dev, "received packet was dropped\n");
 }
 
 static void snull_dev_interrupt(int irq, void *cookie, struct pt_regs *regs)
@@ -165,6 +172,8 @@ static void snull_dev_interrupt(int irq, void *cookie, struct pt_regs *regs)
 	struct snull_priv *priv = netdev_priv(dev);
 	struct snull_packet *pkt = NULL;
 	unsigned long flags;
+
+	netdev_dbg(dev, "snull_dev_interrupt\n");
 
 	spin_lock_irqsave(&priv->lock, flags);
 	if (priv->status & SNULL_RX_INTR) {
@@ -196,6 +205,8 @@ static void snull_dev_tx(struct net_device *dev, char *buf, int len)
 	u32 *saddr, *daddr;
 	struct snull_packet *pkt;
 
+	netdev_dbg(dev, "snull_dev_tx\n");
+
 	ih = (struct iphdr *)(buf + sizeof(struct ethhdr));
 	saddr = &ih->saddr;
 	daddr = &ih->daddr;
@@ -223,7 +234,8 @@ static void snull_dev_tx(struct net_device *dev, char *buf, int len)
 
 static int snull_device_open(struct net_device *dev)
 {
-	netdev_info(dev, "snull_device_open\n");
+	netdev_dbg(dev, "snull_device_open\n");
+
 	memcpy(dev->dev_addr, "\0SNUL0", ETH_ALEN);
 	if (dev == snull_dev[1])
 		dev->dev_addr[ETH_ALEN - 1]++;
@@ -233,7 +245,8 @@ static int snull_device_open(struct net_device *dev)
 
 static int snull_device_stop(struct net_device *dev)
 {
-	netdev_info(dev, "snull_device_stop\n");
+	netdev_dbg(dev, "snull_device_stop\n");
+
 	netif_stop_queue(dev);
 	return 0;
 }
@@ -244,6 +257,8 @@ static netdev_tx_t snull_device_start_xmit(struct sk_buff *skb,
 	struct snull_priv *priv = netdev_priv(dev);
 	char *data, shortpkt[ETH_ZLEN];
 	int len;
+
+	netdev_dbg(dev, "snull_device_start_xmit\n");
 
 	data = skb->data;
 	len = skb->len;
@@ -265,6 +280,8 @@ static void snull_device_tx_timeout(struct net_device *dev)
 {
 	struct snull_priv *priv = netdev_priv(dev);
 
+	netdev_dbg(dev, "snull_device_tx_timeout\n");
+
 	/*
 		lockups should not happen for snull, but actually pretty
 		normal for real hardware devices. So this code does
@@ -278,6 +295,8 @@ static void snull_device_tx_timeout(struct net_device *dev)
 static struct net_device_stats *snull_device_get_stats(struct net_device *dev)
 {
 	struct snull_priv *priv = netdev_priv(dev);
+
+	netdev_dbg(dev, "snull_device_get_stats\n");
 
 	return &priv->stats;
 }
@@ -295,6 +314,8 @@ static int snull_header_create(struct sk_buff *skb, struct net_device *dev,
 			const void *daddr, const void *saddr, unsigned len)
 {
 	struct ethhdr *eth = (struct ethhdr *)skb_push(skb, ETH_HLEN);
+
+	netdev_dbg(dev, "snull_header_create\n");
 
 	eth->h_proto = htons(type);
 	memcpy(eth->h_source, saddr ? saddr : dev->dev_addr, dev->addr_len);
