@@ -66,10 +66,6 @@ static void snull_pool_teardown(struct net_device *dev)
 	struct snull_priv *priv = netdev_priv(dev);
 	struct list_head *pos, *tmp;
 
-	/*
-		Not safe: we must wait all in-flight packets before,
-		but so far it's enough
-	*/
 	list_for_each_safe(pos, tmp, &priv->pool)
 		kfree(S_PACKET(pos));
 }
@@ -354,6 +350,7 @@ static void snull_cleanup(void)
 
 	for (i = 0; i != SNULLS; ++i) {
 		if (snull_dev[i]) {
+			netif_tx_disable(snull_dev[i]); // just to be shure
 			unregister_netdev(snull_dev[i]);
 			snull_pool_teardown(snull_dev[i]);
 			free_netdev(snull_dev[i]);
