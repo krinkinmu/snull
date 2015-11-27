@@ -178,7 +178,7 @@ static void snull_dev_interrupt(int irq, void *cookie, struct pt_regs *regs)
 			snull_dev_rx(dev, pkt);
 	}
 	if (priv->status & SNULL_TX_INTR) {
-		priv->stats.rx_packets++;
+		priv->stats.tx_packets++;
 		priv->stats.tx_bytes += priv->tx_len;
 		/*
 			universal version of dev_kfree_skb, there are also
